@@ -1,3 +1,17 @@
+name: Build SRT Insta Tweak
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install Theos and iOS SDK
         run: |
           set -e
@@ -28,3 +42,10 @@
           find .theos packages -name "SRTInstaPlus.dylib" -exec cp {} output/ \; 2>/dev/null || true
           find packages -name "*.deb" -exec cp {} output/ \; 2>/dev/null || true
           ls -la output
+
+      - name: Upload SRTInstaPlus Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTInstaPlus-Tweak
+          path: output/
+          if-no-files-found: error
