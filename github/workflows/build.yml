@@ -1,0 +1,35 @@
+name: Build SRT Insta Tweak
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Theos and iOS SDK
+        run: |
+          brew install ldid xz
+          git clone --recursive https://github.com/theos/theos.git $HOME/theos
+          mkdir -p $HOME/theos/sdks
+          curl -L https://github.com/xybp888/iOS-SDKs/releases/download/iOS-SDKs/iPhoneOS15.5.sdk.tar.xz | tar -xJ -C $HOME/theos/sdks
+
+      - name: Build dylib & deb
+        env:
+          THEOS: ${{ runner.home }}/theos
+        run: |
+          make package FINALPACKAGE=1
+          mkdir -p output
+          cp .theos/obj/debug/SRTInstaPlus.dylib output/ 2>/dev/null || cp .theos/obj/SRTInstaPlus.dylib output/
+          cp packages/*.deb output/ 2>/dev/null || true
+
+      - name: Upload SRTInstaPlus Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTInstaPlus-Tweak
+          path: output/
