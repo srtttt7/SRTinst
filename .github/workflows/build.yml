@@ -1,23 +1,10 @@
-name: Build SRT Insta Tweak
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Install Theos and iOS SDK
         run: |
           set -e
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
           brew install ldid xz
-          git clone --recursive https://github.com/theos/theos.git $HOME/theos
-          mkdir -p $HOME/theos/sdks
+          git clone --recursive https://github.com/theos/theos.git "$HOME/theos"
+          mkdir -p "$HOME/theos/sdks"
 
           SDK_URL="https://github.com/theos/sdks/archive/refs/heads/master.tar.gz"
           curl -fsSL "$SDK_URL" -o /tmp/sdks.tar.gz
@@ -33,19 +20,11 @@ jobs:
           ls -la "$HOME/theos/sdks"
 
       - name: Build dylib & deb
-        env:
-          THEOS: ${{ runner.home }}/theos
         run: |
           set -e
-          make package FINALPACKAGE=1
+          export THEOS="$HOME/theos"
+          THEOS="$HOME/theos" make package FINALPACKAGE=1
           mkdir -p output
           find .theos packages -name "SRTInstaPlus.dylib" -exec cp {} output/ \; 2>/dev/null || true
           find packages -name "*.deb" -exec cp {} output/ \; 2>/dev/null || true
           ls -la output
-
-      - name: Upload SRTInstaPlus Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SRTInstaPlus-Tweak
-          path: output/
-          if-no-files-found: error
