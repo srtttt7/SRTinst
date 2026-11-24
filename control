@@ -1,0 +1,9 @@
+Package: com.srt.instaplus
+Name: SRT Insta Plus
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Description: SRT Insta Plus Tweak (Ghost Mode, Story Download, Voice to Video Note)
+Maintainer: SRT
+Author: SRT
+Section: Tweaks
+Depends: mobilesubstrate (>= 0.9.5000)
