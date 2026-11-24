@@ -14,22 +14,38 @@ jobs:
 
       - name: Install Theos and iOS SDK
         run: |
+          set -e
           brew install ldid xz
           git clone --recursive https://github.com/theos/theos.git $HOME/theos
           mkdir -p $HOME/theos/sdks
-          curl -L https://github.com/xybp888/iOS-SDKs/releases/download/iOS-SDKs/iPhoneOS15.5.sdk.tar.xz | tar -xJ -C $HOME/theos/sdks
+
+          SDK_URL="https://github.com/theos/sdks/archive/refs/heads/master.tar.gz"
+          curl -fsSL "$SDK_URL" -o /tmp/sdks.tar.gz
+          mkdir -p /tmp/sdks_extract
+          tar -xzf /tmp/sdks.tar.gz -C /tmp/sdks_extract
+
+          FOUND_SDK=$(find /tmp/sdks_extract -maxdepth 2 -name "*.sdk" -type d | head -n 1)
+          if [ -n "$FOUND_SDK" ]; then
+            mv "$FOUND_SDK" "$HOME/theos/sdks/"
+          else
+            cp -R /tmp/sdks_extract/*/* "$HOME/theos/sdks/" 2>/dev/null || cp -R /tmp/sdks_extract/* "$HOME/theos/sdks/"
+          fi
+          ls -la "$HOME/theos/sdks"
 
       - name: Build dylib & deb
         env:
           THEOS: ${{ runner.home }}/theos
         run: |
+          set -e
           make package FINALPACKAGE=1
           mkdir -p output
-          cp .theos/obj/debug/SRTInstaPlus.dylib output/ 2>/dev/null || cp .theos/obj/SRTInstaPlus.dylib output/
-          cp packages/*.deb output/ 2>/dev/null || true
+          find .theos packages -name "SRTInstaPlus.dylib" -exec cp {} output/ \; 2>/dev/null || true
+          find packages -name "*.deb" -exec cp {} output/ \; 2>/dev/null || true
+          ls -la output
 
       - name: Upload SRTInstaPlus Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SRTInstaPlus-Tweak
           path: output/
+          if-no-files-found: error
