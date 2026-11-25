@@ -98,6 +98,99 @@ static inline void SRTSetBool(NSString *key, BOOL val) {
 
 @end
 
-%ctor {
-    NSLog(@"[SRTInstaPlus] Loaded cleanly");
+@interface SRTOpenHelper : NSObject
++ (void)presentSRTSettings;
+@end
+
+@implementation SRTOpenHelper
+
++ (UIViewController *)srt_topViewController {
+    UIWindow *targetWindow = nil;
+    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+        if ([scene isKindOfClass:[UIWindowScene class]] &&
+            scene.activationState == UISceneActivationStateForegroundActive) {
+            UIWindowScene *ws = (UIWindowScene *)scene;
+            for (UIWindow *w in ws.windows) {
+                if (w.isKeyWindow) {
+                    targetWindow = w;
+                    break;
+                }
+            }
+            if (!targetWindow && ws.windows.count > 0) {
+                targetWindow = ws.windows.firstObject;
+            }
+            if (targetWindow) break;
+        }
+    }
+    UIViewController *vc = targetWindow.rootViewController;
+    while (vc.presentedViewController) {
+        vc = vc.presentedViewController;
+    }
+    return vc;
 }
+
++ (void)presentSRTSettings {
+    UIViewController *top = [self srt_topViewController];
+    if (!top) return;
+    SRTInstaSettingsVC *settingsVC = [[SRTInstaSettingsVC alloc] initWithStyle:UITableViewStyleInsetGrouped];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:settingsVC];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    [top presentViewController:nav animated:YES completion:nil];
+}
+
++ (void)injectNearHeartInView:(UIView *)view {
+    if (!view || view.hidden || view.alpha < 0.01) return;
+    for (UIView *sub in view.subviews) {
+        NSString *lbl = [sub.accessibilityLabel lowercaseString] ?: @"";
+        NSString *aid = [sub.accessibilityIdentifier lowercaseString] ?: @"";
+        BOOL matchesHeart = [lbl containsString:@"activity"] ||
+                            [lbl containsString:@"notification"] ||
+                            [lbl containsString:@"الإشعارات"] ||
+                            [lbl containsString:@"النشاط"] ||
+                            [lbl containsString:@"heart"] ||
+                            [aid containsString:@"activity"] ||
+                            [aid containsString:@"news"];
+
+        if (matchesHeart && sub.superview && CGRectGetWidth(sub.bounds) >= 20 && CGRectGetWidth(sub.bounds) <= 80) {
+            if ([sub.superview viewWithTag:884422] == nil) {
+                UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+                btn.tag = 884422;
+                UIImage *icon = [UIImage systemImageNamed:@"slider.horizontal.3"];
+                if (icon) {
+                    [btn setImage:icon forState:UIControlStateNormal];
+                } else {
+                    [btn setTitle:@"SRT" forState:UIControlStateNormal];
+                }
+                btn.tintColor = sub.tintColor ?: [UIColor labelColor];
+                CGFloat size = MAX(30.0, CGRectGetHeight(sub.frame));
+                CGFloat x = MAX(6.0, CGRectGetMinX(sub.frame) - size - 6.0);
+                CGFloat y = CGRectGetMidY(sub.frame) - (size / 2.0);
+                btn.frame = CGRectMake(x, y, size, size);
+                [btn addTarget:self action:@selector(presentSRTSettings) forControlEvents:UIControlEventTouchUpInside];
+                [sub.superview addSubview:btn];
+            }
+            return;
+        }
+        [self injectNearHeartInView:sub];
+    }
+}
+
++ (void)scanActiveWindowForHeart {
+    UIViewController *top = [self srt_topViewController];
+    if (top.view) {
+        [self injectNearHeartInView:top.view];
+    }
+}
+
+@end
+
+%hook UIViewController
+
+- (void)viewDidAppear:(BOOL)animated {
+    %orig;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [SRTOpenHelper scanActiveWindowForHeart];
+    });
+}
+
+%end
