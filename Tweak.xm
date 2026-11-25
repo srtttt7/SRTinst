@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 
+// MARK: - مفاتيح حفظ الإعدادات
 static NSString * const kGhostStoryKey    = @"srt_insta_ghost_story";
 static NSString * const kGhostDMKey       = @"srt_insta_ghost_dm";
 static NSString * const kDownloadStoryKey = @"srt_insta_download_story";
@@ -18,6 +19,7 @@ static inline void SRTSetBool(NSString *key, BOOL val) {
     [ud synchronize];
 }
 
+// MARK: - صفحة الإعدادات الموحدة (SRT Insta Plus)
 @interface SRTInstaSettingsVC : UITableViewController
 @end
 
@@ -97,102 +99,85 @@ static inline void SRTSetBool(NSString *key, BOOL val) {
 
 @end
 
-@interface SRTSafeBridge : NSObject
-+ (void)openSettingsSafe;
-+ (void)scanInView:(UIView *)view depth:(int)depth;
+// MARK: - إدارة الزر الرايق الثابت بجانب القلب أعلى اليمين
+@interface SRTHeaderButtonManager : NSObject
++ (void)openSettings;
++ (void)syncButtonInHeader;
 @end
 
-@implementation SRTSafeBridge
+@implementation SRTHeaderButtonManager
 
-+ (UIViewController *)topVC {
++ (UIWindow *)mainWindow {
     @try {
-        UIWindow *win = nil;
         for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if ([scene isKindOfClass:[UIWindowScene class]] &&
                 scene.activationState == UISceneActivationStateForegroundActive) {
                 UIWindowScene *ws = (UIWindowScene *)scene;
                 for (UIWindow *w in ws.windows) {
-                    if (w.isKeyWindow) { win = w; break; }
+                    if (w.isKeyWindow) return w;
                 }
-                if (!win) win = ws.windows.firstObject;
-                if (win) break;
+                if (ws.windows.count > 0) return ws.windows.firstObject;
             }
         }
-        UIViewController *vc = win.rootViewController;
-        while (vc.presentedViewController) {
-            vc = vc.presentedViewController;
-        }
-        return vc;
-    } @catch (__unused NSException *e) {
-        return nil;
-    }
+    } @catch (__unused NSException *e) {}
+    return nil;
 }
 
-+ (void)openSettingsSafe {
++ (void)openSettings {
     @try {
-        UIViewController *top = [self topVC];
+        UIWindow *win = [self mainWindow];
+        UIViewController *top = win.rootViewController;
+        while (top.presentedViewController) {
+            top = top.presentedViewController;
+        }
         if (!top) return;
         SRTInstaSettingsVC *vc = [[SRTInstaSettingsVC alloc] initWithStyle:UITableViewStyleInsetGrouped];
         UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
         nav.modalPresentationStyle = UIModalPresentationPageSheet;
         [top presentViewController:nav animated:YES completion:nil];
-    } @catch (__unused NSException *e) {
-    }
+    } @catch (__unused NSException *e) {}
 }
 
-+ (void)scanInView:(UIView *)view depth:(int)depth {
-    if (!view || depth > 8) return;
++ (void)syncButtonInHeader {
     @try {
-        NSArray<UIView *> *subs = [view.subviews copy];
-        for (UIView *sub in subs) {
-            if (![sub isKindOfClass:[UIView class]] || sub.hidden) continue;
+        UIWindow *win = [self mainWindow];
+        if (!win) return;
 
-            NSString *lbl = @"";
-            NSString *aid = @"";
-            @try {
-                if (sub.accessibilityLabel) lbl = [sub.accessibilityLabel lowercaseString];
-                if (sub.accessibilityIdentifier) aid = [sub.accessibilityIdentifier lowercaseString];
-            } @catch (__unused NSException *e) {}
+        CGFloat topInset = win.safeAreaInsets.top > 0 ? win.safeAreaInsets.top : 44.0;
+        CGFloat btnSize = 32.0;
+        // مكان رايق بجانب القلب في أعلى اليمين داخل شريط الهيدر
+        CGFloat xPos = CGRectGetWidth(win.bounds) - 82.0;
+        CGFloat yPos = topInset + 6.0;
 
-            BOOL isHeart = [lbl containsString:@"activity"] ||
-                           [lbl containsString:@"notification"] ||
-                           [lbl containsString:@"الإشعارات"] ||
-                           [lbl containsString:@"النشاط"] ||
-                           [aid containsString:@"activity"] ||
-                           [aid containsString:@"news"];
-
-            if (isHeart && sub.superview && [sub.superview viewWithTag:775533] == nil) {
-                CGRect f = sub.frame;
-                if (f.size.width >= 18 && f.size.width <= 90) {
-                    UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
-                    btn.tag = 775533;
-                    UIImage *img = [UIImage systemImageNamed:@"slider.horizontal.3"];
-                    if (img) {
-                        [btn setImage:img forState:UIControlStateNormal];
-                    } else {
-                        [btn setTitle:@"SRT" forState:UIControlStateNormal];
-                    }
-                    btn.tintColor = sub.tintColor ?: [UIColor labelColor];
-                    CGFloat sz = MAX(28.0, f.size.height);
-                    btn.frame = CGRectMake(MAX(4.0, f.origin.x - sz - 4.0), f.origin.y, sz, sz);
-                    [btn addTarget:self action:@selector(openSettingsSafe) forControlEvents:UIControlEventTouchUpInside];
-                    [sub.superview addSubview:btn];
-                    return;
-                }
+        UIButton *btn = [win viewWithTag:556677];
+        if (!btn) {
+            btn = [UIButton buttonWithType:UIButtonTypeSystem];
+            btn.tag = 556677;
+            btn.backgroundColor = [UIColor clearColor];
+            btn.tintColor = [UIColor whiteColor];
+            UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIImageSymbolWeightRegular];
+            UIImage *img = [UIImage systemImageNamed:@"slider.horizontal.3" withConfiguration:cfg];
+            if (img) {
+                [btn setImage:img forState:UIControlStateNormal];
+            } else {
+                [btn setTitle:@"+" forState:UIControlStateNormal];
             }
-            [self scanInView:sub depth:depth + 1];
+            [btn addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
+            [win addSubview:btn];
         }
-    } @catch (__unused NSException *e) {
-    }
+
+        btn.frame = CGRectMake(xPos, yPos, btnSize, btnSize);
+        [win bringSubviewToFront:btn];
+    } @catch (__unused NSException *e) {}
 }
 
 @end
 
 %ctor {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIViewController *top = [SRTSafeBridge topVC];
-        if (top.view) {
-            [SRTSafeBridge scanInView:top.view depth:0];
-        }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [SRTHeaderButtonManager syncButtonInHeader];
+        [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:YES block:^(__unused NSTimer *t) {
+            [SRTHeaderButtonManager syncButtonInHeader];
+        }];
     });
 }
