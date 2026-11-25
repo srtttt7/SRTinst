@@ -1,81 +1,139 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
+#import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 
-static const NSInteger kSRTGlassTag = 778899;
+static const NSInteger kSRTGlassViewTag = 889900;
 
-// MARK: - إضافة طبقة الزجاج السائل على أي عنصر واجهة بأمان
-static void SRTApplyLiquidGlassToView(UIView *view, CGFloat cornerRadius, BOOL addBorder) {
-    if (!view || [view viewWithTag:kSRTGlassTag] != nil) return;
+// MARK: - إجبار الطبقات الداخلية المعتمة على الشفافية ليظهر الزجاج
+static void SRTClearOpaqueSublayers(UIView *view, int depth) {
+    if (!view || depth > 3) return;
+    for (UIView *sub in view.subviews) {
+        if (sub.tag == kSRTGlassViewTag) continue;
+        // استثناء الأيقونات والصور والنصوص
+        if ([sub isKindOfClass:[UIImageView class]] ||
+            [sub isKindOfClass:[UILabel class]] ||
+            [sub isKindOfClass:[UIControl class]]) {
+            continue;
+        }
+        // إذا كانت طبقة خلفية بعرض الشريط كامل، نجعلها شفافة
+        if (CGRectGetWidth(sub.bounds) > CGRectGetWidth(view.bounds) * 0.75 &&
+            CGRectGetHeight(sub.bounds) > CGRectGetHeight(view.bounds) * 0.65) {
+            sub.backgroundColor = [UIColor clearColor];
+            sub.opaque = NO;
+            sub.layer.backgroundColor = [UIColor clearColor].CGColor;
+        }
+        SRTClearOpaqueSublayers(sub, depth + 1);
+    }
+}
+
+// MARK: - تطبيق تأثير Liquid Glass حقيقي على الشريط
+static void SRTApplyLiquidGlass(UIView *bar, BOOL floatingPill) {
+    if (!bar) return;
     @try {
-        UIBlurEffectStyle style = UIBlurEffectStyleSystemUltraThinMaterial;
-        if (@available(iOS 13.0, *)) {
-            style = UIBlurEffectStyleSystemUltraThinMaterial;
-        }
-        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:style];
-        UIVisualEffectView *glassView = [[UIVisualEffectView alloc] initWithEffect:blur];
-        glassView.tag = kSRTGlassTag;
-        glassView.frame = view.bounds;
-        glassView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        glassView.userInteractionEnabled = NO;
-        glassView.alpha = 0.92;
+        bar.backgroundColor = [UIColor clearColor];
+        bar.opaque = NO;
+        bar.layer.backgroundColor = [UIColor clearColor].CGColor;
+        SRTClearOpaqueSublayers(bar, 0);
 
-        if (cornerRadius > 0) {
-            glassView.layer.cornerRadius = cornerRadius;
-            glassView.clipsToBounds = YES;
+        UIVisualEffectView *glass = [bar viewWithTag:kSRTGlassViewTag];
+        if (!glass) {
+            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
+            glass = [[UIVisualEffectView alloc] initWithEffect:blur];
+            glass.tag = kSRTGlassViewTag;
+            glass.userInteractionEnabled = NO;
+
+            // لمعة زجاجية خفيفة في الأعلى (Specular highlight)
+            CAGradientLayer *shine = [CAGradientLayer layer];
+            shine.name = @"srt_glass_shine";
+            shine.colors = @[
+                (id)[[UIColor whiteColor] colorWithAlphaComponent:0.18].CGColor,
+                (id)[[UIColor whiteColor] colorWithAlphaComponent:0.03].CGColor,
+                (id)[[UIColor clearColor] CGColor]
+            ];
+            shine.locations = @[@0.0, @0.35, @1.0];
+            [glass.contentView.layer addSublayer:shine];
+
+            glass.layer.borderWidth = 0.65;
+            glass.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.28].CGColor;
+
+            [bar insertSubview:glass atIndex:0];
         }
 
-        if (addBorder) {
-            glassView.layer.borderWidth = 0.6;
-            glassView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.22].CGColor;
+        if (floatingPill) {
+            CGRect insetRect = CGRectInset(bar.bounds, 10.0, 4.0);
+            if (CGRectGetWidth(insetRect) > 40 && CGRectGetHeight(insetRect) > 24) {
+                glass.frame = insetRect;
+                glass.layer.cornerRadius = CGRectGetHeight(insetRect) / 2.0;
+                glass.clipsToBounds = YES;
+            } else {
+                glass.frame = bar.bounds;
+            }
+        } else {
+            glass.frame = bar.bounds;
+            glass.layer.cornerRadius = 0;
         }
 
-        view.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.04];
-        [view insertSubview:glassView atIndex:0];
+        for (CALayer *l in glass.contentView.layer.sublayers) {
+            if ([l.name isEqualToString:@"srt_glass_shine"]) {
+                l.frame = glass.bounds;
+            }
+        }
     } @catch (__unused NSException *e) {}
 }
 
-// MARK: - فحص أشرطة التطبيق وتطبيق مظهر الزجاج عليها
-static void SRTScanAndGlassWindow(UIWindow *win) {
+// MARK: - البحث عن أشرطة إنستغرام وتطبيق الزجاج السائل
+static void SRTUpdateGlassInWindow(UIWindow *win) {
     if (!win) return;
     @try {
+        CGFloat screenW = CGRectGetWidth(win.bounds);
+        CGFloat screenH = CGRectGetHeight(win.bounds);
+
         NSMutableArray<UIView *> *queue = [NSMutableArray arrayWithObject:win];
-        NSUInteger visited = 0;
+        NSUInteger count = 0;
 
-        while (queue.count > 0 && visited < 450) {
-            UIView *current = queue.firstObject;
+        while (queue.count > 0 && count < 500) {
+            UIView *v = queue.firstObject;
             [queue removeObjectAtIndex:0];
-            visited++;
+            count++;
 
-            if (!current || current.hidden || current.alpha < 0.05) continue;
+            if (!v || v.hidden || v.alpha < 0.05) continue;
 
-            NSString *clsName = NSStringFromClass([current class]) ?: @"";
-            NSString *lower = [clsName lowercaseString];
+            NSString *cls = [NSStringFromClass([v class]) ?: @"" lowercaseString];
+            CGRect frameInWin = [v convertRect:v.bounds toView:win];
 
-            // أشرطة التبويب والتنقل والهيدر
-            if ([current isKindOfClass:[UITabBar class]] ||
-                [current isKindOfClass:[UINavigationBar class]] ||
-                [lower containsString:@"tabbar"] ||
-                [lower containsString:@"navigationbar"] ||
-                [lower containsString:@"headerview"] ||
-                [lower containsString:@"storiesbar"]) {
-                SRTApplyLiquidGlassToView(current, 0, NO);
+            // 1. شريط التبويب السفلي (Tab Bar) -> شكل كبسولة زجاجية عائمة (Liquid Glass Pill)
+            BOOL isBottomBar = ([v isKindOfClass:[UITabBar class]] || [cls containsString:@"tabbar"]) &&
+                               CGRectGetWidth(frameInWin) > screenW * 0.8 &&
+                               CGRectGetHeight(frameInWin) >= 40 &&
+                               CGRectGetHeight(frameInWin) <= 110 &&
+                               CGRectGetMaxY(frameInWin) > screenH - 120;
+
+            // 2. الهيدر العلوي (Navigation / Top Header)
+            BOOL isTopHeader = ([v isKindOfClass:[UINavigationBar class]] ||
+                                [cls containsString:@"navigationbar"] ||
+                                [cls containsString:@"headerview"]) &&
+                               CGRectGetWidth(frameInWin) > screenW * 0.8 &&
+                               CGRectGetHeight(frameInWin) >= 36 &&
+                               CGRectGetHeight(frameInWin) <= 120 &&
+                               CGRectGetMinY(frameInWin) < 120;
+
+            if (isBottomBar) {
+                SRTApplyLiquidGlass(v, YES);
+            } else if (isTopHeader) {
+                SRTApplyLiquidGlass(v, NO);
             }
-            // البطاقات والقوائم المنبثقة
-            else if ([lower containsString:@"actionsheet"] ||
-                     [lower containsString:@"bottomsheet"] ||
-                     [lower containsString:@"popover"]) {
-                SRTApplyLiquidGlassToView(current, 18.0, YES);
-            }
 
-            for (UIView *sub in current.subviews) {
-                if (sub) [queue addObject:sub];
+            for (UIView *sub in v.subviews) {
+                if (sub && sub.tag != kSRTGlassViewTag) {
+                    [queue addObject:sub];
+                }
             }
         }
     } @catch (__unused NSException *e) {}
 }
 
-static UIWindow *SRTGetActiveWindow(void) {
+static UIWindow *SRTActiveWindow(void) {
     @try {
         for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if ([scene isKindOfClass:[UIWindowScene class]] &&
@@ -92,13 +150,13 @@ static UIWindow *SRTGetActiveWindow(void) {
 }
 
 %ctor {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *w = SRTGetActiveWindow();
-        if (w) SRTScanAndGlassWindow(w);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIWindow *w = SRTActiveWindow();
+        if (w) SRTUpdateGlassInWindow(w);
 
-        [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(__unused NSTimer *timer) {
-            UIWindow *active = SRTGetActiveWindow();
-            if (active) SRTScanAndGlassWindow(active);
+        [NSTimer scheduledTimerWithTimeInterval:0.7 repeats:YES block:^(__unused NSTimer *t) {
+            UIWindow *active = SRTActiveWindow();
+            if (active) SRTUpdateGlassInWindow(active);
         }];
     });
 }
