@@ -22,6 +22,12 @@ static inline void SRTSetBool(NSString *key, BOOL val) {
     [ud synchronize];
 }
 
+static inline NSString *SRTLowerClassName(id obj) {
+    if (!obj) return @"";
+    NSString *cls = NSStringFromClass([obj class]);
+    return cls ? [cls lowercaseString] : @"";
+}
+
 // MARK: - دوال مساعدة للنافذة والواجهة
 @interface SRTTweakEngine : NSObject
 + (UIWindow *)activeWindow;
@@ -215,7 +221,7 @@ static void SRTReplaceMethodIfExists(const char *className, const char *selName,
         }
         for (UIViewController *child in vc.childViewControllers) {
             if (child.isViewLoaded && child.view.window && !child.view.hidden && child.view.alpha > 0.01) {
-                NSString *c = [NSStringFromClass([child class]) lowercaseString];
+                NSString *c = SRTLowerClassName(child);
                 if ([c containsString:@"feed"] || [c containsString:@"story"] ||
                     [c containsString:@"direct"] || [c containsString:@"login"]) {
                     return [self topVisibleViewControllerFrom:child];
@@ -234,8 +240,8 @@ static void SRTReplaceMethodIfExists(const char *className, const char *selName,
         for (UIView *sub in view.subviews) {
             CGRect f = sub.frame;
             if (f.origin.y < 140 && f.origin.x < 90 && f.size.width >= 20 && f.size.width <= 70) {
-                NSString *lbl = [sub.accessibilityLabel lowercaseString] ?: @"";
-                NSString *aid = [sub.accessibilityIdentifier lowercaseString] ?: @"";
+                NSString *lbl = sub.accessibilityLabel ? [sub.accessibilityLabel lowercaseString] : @"";
+                NSString *aid = sub.accessibilityIdentifier ? [sub.accessibilityIdentifier lowercaseString] : @"";
                 if ([lbl containsString:@"create"] || [lbl containsString:@"new post"] ||
                     [lbl containsString:@"إضافة"] || [lbl containsString:@"إنشاء"] ||
                     [aid containsString:@"create"] || [aid containsString:@"plus"] ||
@@ -257,7 +263,7 @@ static void SRTReplaceMethodIfExists(const char *className, const char *selName,
         UIViewController *top = [self topVisibleViewControllerFrom:win.rootViewController];
         if (!top || top.presentingViewController != nil) return NO;
 
-        NSString *lowerCls = [[NSStringFromClass([top class]) ?: @""] lowercaseString];
+        NSString *lowerCls = SRTLowerClassName(top);
         NSArray<NSString *> *blocked = @[
             @"story", @"reel", @"clip", @"direct", @"thread", @"inbox",
             @"login", @"signin", @"signup", @"auth", @"onboarding", @"nux",
@@ -276,10 +282,10 @@ static void SRTReplaceMethodIfExists(const char *className, const char *selName,
     @try {
         if (!win || !win.rootViewController) return NO;
         UIViewController *top = [self topVisibleViewControllerFrom:win.rootViewController];
-        NSString *lowerCls = [[NSStringFromClass([top class]) ?: @""] lowercaseString];
+        NSString *lowerCls = SRTLowerClassName(top);
         if ([lowerCls containsString:@"story"]) return YES;
         for (UIView *v in win.subviews) {
-            NSString *vl = [[NSStringFromClass([v class]) ?: @""] lowercaseString];
+            NSString *vl = SRTLowerClassName(v);
             if ([vl containsString:@"story"] && !v.hidden && v.alpha > 0.01) return YES;
         }
     } @catch (__unused NSException *e) {}
