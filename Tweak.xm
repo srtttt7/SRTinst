@@ -1,7 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 
-// MARK: - مفاتيح حفظ الإعدادات
 static NSString * const kGhostStoryKey    = @"srt_insta_ghost_story";
 static NSString * const kGhostDMKey       = @"srt_insta_ghost_dm";
 static NSString * const kDownloadStoryKey = @"srt_insta_download_story";
@@ -98,99 +97,102 @@ static inline void SRTSetBool(NSString *key, BOOL val) {
 
 @end
 
-@interface SRTOpenHelper : NSObject
-+ (void)presentSRTSettings;
+@interface SRTSafeBridge : NSObject
++ (void)openSettingsSafe;
++ (void)scanInView:(UIView *)view depth:(int)depth;
 @end
 
-@implementation SRTOpenHelper
+@implementation SRTSafeBridge
 
-+ (UIViewController *)srt_topViewController {
-    UIWindow *targetWindow = nil;
-    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-        if ([scene isKindOfClass:[UIWindowScene class]] &&
-            scene.activationState == UISceneActivationStateForegroundActive) {
-            UIWindowScene *ws = (UIWindowScene *)scene;
-            for (UIWindow *w in ws.windows) {
-                if (w.isKeyWindow) {
-                    targetWindow = w;
-                    break;
++ (UIViewController *)topVC {
+    @try {
+        UIWindow *win = nil;
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if ([scene isKindOfClass:[UIWindowScene class]] &&
+                scene.activationState == UISceneActivationStateForegroundActive) {
+                UIWindowScene *ws = (UIWindowScene *)scene;
+                for (UIWindow *w in ws.windows) {
+                    if (w.isKeyWindow) { win = w; break; }
+                }
+                if (!win) win = ws.windows.firstObject;
+                if (win) break;
+            }
+        }
+        UIViewController *vc = win.rootViewController;
+        while (vc.presentedViewController) {
+            vc = vc.presentedViewController;
+        }
+        return vc;
+    } @catch (__unused NSException *e) {
+        return nil;
+    }
+}
+
++ (void)openSettingsSafe {
+    @try {
+        UIViewController *top = [self topVC];
+        if (!top) return;
+        SRTInstaSettingsVC *vc = [[SRTInstaSettingsVC alloc] initWithStyle:UITableViewStyleInsetGrouped];
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+        nav.modalPresentationStyle = UIModalPresentationPageSheet;
+        [top presentViewController:nav animated:YES completion:nil];
+    } @catch (__unused NSException *e) {
+    }
+}
+
++ (void)scanInView:(UIView *)view depth:(int)depth {
+    if (!view || depth > 8) return;
+    @try {
+        NSArray<UIView *> *subs = [view.subviews copy];
+        for (UIView *sub in subs) {
+            if (![sub isKindOfClass:[UIView class]] || sub.hidden) continue;
+
+            NSString *lbl = @"";
+            NSString *aid = @"";
+            @try {
+                if (sub.accessibilityLabel) lbl = [sub.accessibilityLabel lowercaseString];
+                if (sub.accessibilityIdentifier) aid = [sub.accessibilityIdentifier lowercaseString];
+            } @catch (__unused NSException *e) {}
+
+            BOOL isHeart = [lbl containsString:@"activity"] ||
+                           [lbl containsString:@"notification"] ||
+                           [lbl containsString:@"الإشعارات"] ||
+                           [lbl containsString:@"النشاط"] ||
+                           [aid containsString:@"activity"] ||
+                           [aid containsString:@"news"];
+
+            if (isHeart && sub.superview && [sub.superview viewWithTag:775533] == nil) {
+                CGRect f = sub.frame;
+                if (f.size.width >= 18 && f.size.width <= 90) {
+                    UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+                    btn.tag = 775533;
+                    UIImage *img = [UIImage systemImageNamed:@"slider.horizontal.3"];
+                    if (img) {
+                        [btn setImage:img forState:UIControlStateNormal];
+                    } else {
+                        [btn setTitle:@"SRT" forState:UIControlStateNormal];
+                    }
+                    btn.tintColor = sub.tintColor ?: [UIColor labelColor];
+                    CGFloat sz = MAX(28.0, f.size.height);
+                    btn.frame = CGRectMake(MAX(4.0, f.origin.x - sz - 4.0), f.origin.y, sz, sz);
+                    [btn addTarget:self action:@selector(openSettingsSafe) forControlEvents:UIControlEventTouchUpInside];
+                    [sub.superview addSubview:btn];
+                    return;
                 }
             }
-            if (!targetWindow && ws.windows.count > 0) {
-                targetWindow = ws.windows.firstObject;
-            }
-            if (targetWindow) break;
+            [self scanInView:sub depth:depth + 1];
         }
-    }
-    UIViewController *vc = targetWindow.rootViewController;
-    while (vc.presentedViewController) {
-        vc = vc.presentedViewController;
-    }
-    return vc;
-}
-
-+ (void)presentSRTSettings {
-    UIViewController *top = [self srt_topViewController];
-    if (!top) return;
-    SRTInstaSettingsVC *settingsVC = [[SRTInstaSettingsVC alloc] initWithStyle:UITableViewStyleInsetGrouped];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:settingsVC];
-    nav.modalPresentationStyle = UIModalPresentationPageSheet;
-    [top presentViewController:nav animated:YES completion:nil];
-}
-
-+ (void)injectNearHeartInView:(UIView *)view {
-    if (!view || view.hidden || view.alpha < 0.01) return;
-    for (UIView *sub in view.subviews) {
-        NSString *lbl = [sub.accessibilityLabel lowercaseString] ?: @"";
-        NSString *aid = [sub.accessibilityIdentifier lowercaseString] ?: @"";
-        BOOL matchesHeart = [lbl containsString:@"activity"] ||
-                            [lbl containsString:@"notification"] ||
-                            [lbl containsString:@"الإشعارات"] ||
-                            [lbl containsString:@"النشاط"] ||
-                            [lbl containsString:@"heart"] ||
-                            [aid containsString:@"activity"] ||
-                            [aid containsString:@"news"];
-
-        if (matchesHeart && sub.superview && CGRectGetWidth(sub.bounds) >= 20 && CGRectGetWidth(sub.bounds) <= 80) {
-            if ([sub.superview viewWithTag:884422] == nil) {
-                UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
-                btn.tag = 884422;
-                UIImage *icon = [UIImage systemImageNamed:@"slider.horizontal.3"];
-                if (icon) {
-                    [btn setImage:icon forState:UIControlStateNormal];
-                } else {
-                    [btn setTitle:@"SRT" forState:UIControlStateNormal];
-                }
-                btn.tintColor = sub.tintColor ?: [UIColor labelColor];
-                CGFloat size = MAX(30.0, CGRectGetHeight(sub.frame));
-                CGFloat x = MAX(6.0, CGRectGetMinX(sub.frame) - size - 6.0);
-                CGFloat y = CGRectGetMidY(sub.frame) - (size / 2.0);
-                btn.frame = CGRectMake(x, y, size, size);
-                [btn addTarget:self action:@selector(presentSRTSettings) forControlEvents:UIControlEventTouchUpInside];
-                [sub.superview addSubview:btn];
-            }
-            return;
-        }
-        [self injectNearHeartInView:sub];
-    }
-}
-
-+ (void)scanActiveWindowForHeart {
-    UIViewController *top = [self srt_topViewController];
-    if (top.view) {
-        [self injectNearHeartInView:top.view];
+    } @catch (__unused NSException *e) {
     }
 }
 
 @end
 
-%hook UIViewController
-
-- (void)viewDidAppear:(BOOL)animated {
-    %orig;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [SRTOpenHelper scanActiveWindowForHeart];
+%ctor {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIViewController *top = [SRTSafeBridge topVC];
+        if (top.view) {
+            [SRTSafeBridge scanInView:top.view depth:0];
+        }
     });
 }
-
-%end
